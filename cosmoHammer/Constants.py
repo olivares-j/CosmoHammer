@@ -8,11 +8,11 @@ FILE_SUFFIX = ".out"
 
 LOG_FILE_SUFFIX = ".log"
 
-PROB_PREFIX = "prob"
+PROB_PREFIX = "_prob"
 
-BURNIN_PREFIX = "burnin"
+BURNIN_PREFIX = "_burnin"
 
-STATE_PREFIX = "state"
+STATE_PREFIX = "_state"
 
 PROB_SUFFIX = PROB_PREFIX+FILE_SUFFIX
 

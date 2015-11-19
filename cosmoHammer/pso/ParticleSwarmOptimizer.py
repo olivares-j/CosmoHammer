@@ -64,7 +64,7 @@ class ParticleSwarmOptimizer(object):
         
         return swarm
         
-    def sample(self, maxIter=1000, c1=1.193, c2=1.193, p=0.7, m=10**-3, n=10**-2):
+    def sample(self, maxIter=1000, c1=1.49618, c2=1.49618, p=0.7, m=10**-3, n=10**-2):
         """
         Launches the PSO. Yields the complete swarm per iteration
         
@@ -76,6 +76,7 @@ class ParticleSwarmOptimizer(object):
         :param n: stop criterion, difference between norm of the particle vector and norm of the global best
         """
         self._get_fitness(self.swarm)
+
         i = 0
         while True:
             
@@ -99,12 +100,13 @@ class ParticleSwarmOptimizer(object):
                     print("converged after %s iterations!"%i)
                     print("best fit found: ", self.gbest.fitness, self.gbest.position)
                 return
-
+            
             
             for particle in self.swarm:
-                 
-                w = 0.5 + numpy.random.uniform(0,1,size=self.paramCount)/2
-                #w=0.72
+                #This is a PSO with inertia
+                #w = 0.5 + numpy.random.uniform(0,1,size=self.paramCount)/2
+                #----- This is PSO of Clerc and Kennedy 2002
+                w=0.7298 
                 part_vel = w * particle.velocity
                 cog_vel = c1 * numpy.random.uniform(0,1,size=self.paramCount) * (particle.pbest.position - particle.position)
                 soc_vel = c2 * numpy.random.uniform(0,1,size=self.paramCount) * (self.gbest.position - particle.position)
@@ -171,8 +173,17 @@ class ParticleSwarmOptimizer(object):
     def _convergedFit(self, it, p, m):
         bestSort = numpy.sort([particle.pbest.fitness for particle in self.swarm])[::-1]
         meanFit = numpy.mean(bestSort[1:math.floor(self.particleCount*p)])
-#        print( "best %f, meanFit %f, ration %f"%( self.gbest[0], meanFit, abs((self.gbest[0]-meanFit))))
-        return (abs(self.gbest.fitness-meanFit)<m)
+        #print( "best , meanFit, ration %",self.gbest.fitness, meanFit, (self.gbest.fitness-meanFit))
+        return ((self.gbest.fitness-meanFit)<m)
+
+    # def _convergedFit2(self, it, p, m):
+    #     bestSort = numpy.sort([particle.pbest.fitness for particle in self.swarm])[::-1]
+    #     maxFit = max(bestSort[1:math.floor(self.particleCount*p)])
+    #     minFit = min(bestSort[1:math.floor(self.particleCount*p)])
+    #     cond1  = abs(self.gbest.fitness-maxFit)<m
+    #     cond2  = abs(self.gbest.fitness-minFit)<m
+    #     #print( "best , meanFit, ration %",self.gbest.fitness, meanFit, (self.gbest.fitness-meanFit))
+    #     return (cond1 and cond2)
     
     def _convergedSpace(self, it, p, m):
         sortedSwarm = [particle for particle in self.swarm]
@@ -184,6 +195,7 @@ class ParticleSwarmOptimizer(object):
             diffs.append(self.gbest.position-particle.position)
             
         maxNorm = max(list(map(numpy.linalg.norm, diffs)))
+        print('Max Norm',maxNorm,'Best fitness',self.gbest.fitness)
         return (abs(maxNorm)<m)
 
     def _convergedSpace2(self, p):
@@ -225,9 +237,8 @@ class Particle(object):
         """
         Creates a new particle without position, velocity and -inf as fitness
         """
-        
-        return Particle(numpy.array([[]]*paramCount),
-                 numpy.array([[]]*paramCount),
+        return Particle(numpy.array([[]]*paramCount).reshape((paramCount,0)),
+                 numpy.array([[]]*paramCount).reshape((paramCount,0)),
                  -numpy.Inf)
         
     def updatePBest(self):

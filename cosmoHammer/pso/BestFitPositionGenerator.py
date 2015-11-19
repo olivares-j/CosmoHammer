@@ -7,7 +7,7 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 
 import numpy
 from cosmoHammer.pso.ParticleSwarmOptimizer import ParticleSwarmOptimizer
-from cosmoHammer.pso.ParaboloidFitter import ParaboloidFitter
+#from cosmoHammer.pso.ParaboloidFitter import ParaboloidFitter
 from cosmoHammer.pso.CurvatureFitter import CurvatureFitter
 
 class BestFitPositionGenerator(object):
@@ -29,11 +29,12 @@ class BestFitPositionGenerator(object):
     
     MIN_PARTICLE_COUNT = 20
     
-    BEST_FILE_NAME = "_best_fit_global.out"
+    BEST_FILE_NAME = "_best_global_fit.out"
 
-    BEST_INFO_FILE_NAME = "_best_fit_info.out"
+    BEST_INFO_FILE_NAME = "_pso_fit.out"
 
-    def __init__(self, mpi=False, threads=1, particleCount=None, maxIter=None):
+    def __init__(self,filePrefix='0', mpi=False, threads=1, particleCount=None, maxIter=None,
+                    low=0,high=1,p=0.7, m=10**-3, n=10**-2):
         """
             default constructor
         """
@@ -44,15 +45,22 @@ class BestFitPositionGenerator(object):
         self.maxIter = maxIter
         if(self.maxIter is None):
             self.maxIter = self.MAX_PSO_ITER
+
+        self.low = low
+        self.high = high
+
+        self.p = p
+        self.m = m
+        self.n = n
+        self.filePrefix = filePrefix
         
 
-    def setup(self, sampler):
+    def setup(self, chain):
         """
         setup the generator
         """
-        self.sampler = sampler
         
-    def generate(self):
+    def generate(self,chain):
         """
         generates the positions by running the PSO and using the chain's min and max and then calling 
         the paraboloid fitter in order to estimate the covariance matrix. The position will then
@@ -61,40 +69,42 @@ class BestFitPositionGenerator(object):
         The progress of the PSO is successively stored to a the disk.
         """
         
-        chain = self.sampler.likelihoodComputationChain
-        
         if(self.particleCount is None):
-            self.particleCount = self.get_particle_count()
+            self.particleCount = MIN_PARTICLE_COUNT
 
         if(self.mpi):
             #only import when needed in order to avoid an error in case mpi4py is not installed
-            from cosmoHammer.sampler.util.pso.MpiParticleSwarmOptimizer import MpiParticleSwarmOptimizer
+            from cosmoHammer.pso.MpiParticleSwarmOptimizer import MpiParticleSwarmOptimizer
             
-            pso = MpiParticleSwarmOptimizer(chain, chain.min, chain.max, self.particleCount, threads=self.threads)
+            pso = MpiParticleSwarmOptimizer(chain, self.low, self.high, self.particleCount, threads=self.threads)
         else:
-            pso = ParticleSwarmOptimizer(chain, chain.min, chain.max, self.particleCount, threads=self.threads)
+            pso = ParticleSwarmOptimizer(chain, self.low, self.high, self.particleCount, threads=self.threads)
         
+        if(pso.isMaster()):
+            print("I am the master")
         swarm = []
-        with open(self.sampler.filePrefix+self.BEST_FILE_NAME, "w") as f:
-            for i, cswarm in enumerate(pso.sample(self.maxIter)):
+        with open(self.filePrefix+self.BEST_FILE_NAME, "w") as f:
+            for i, cswarm in enumerate(pso.sample(maxIter=self.maxIter,p=self.p,m=self.m,n=self.n)):
                 self._save(f, i, pso)
                 if(i>=0):
                     swarm.append(cswarm)
 
             self._save(f, i+1, pso)
-        self.sampler.log("Best fit found after %s iteration: %f %s"%(i+1, pso.gbest.fitness, pso.gbest.position))
-        
-        
-        fswarm = []
-        for i in range(1,5):
-            fswarm += swarm[-i]
-
-        self._storeSwarm(fswarm)
-        
-        fitter = CurvatureFitter(fswarm, pso.gbest)
-        mean, _cov = fitter.fit()
-        
-        self._storeFit(pso.gbest, _cov)
+            
+        if(pso.isMaster()):
+            print("Best fit found after %s iteration: %f %s"%(i+1, pso.gbest.fitness, pso.gbest.position))
+            
+            if self.maxIter > 5 :
+                fswarm = []
+                for i in range(1,5):
+                    fswarm += swarm[-i]
+                self._storeSwarm(fswarm)
+            print("Start process of fitting.It uses all gbest found")
+            fitter = CurvatureFitter(swarm, pso.gbest)
+            mean, _cov = fitter.fit()
+            
+            self._storeFit(pso.gbest, _cov)
+        pass
 
 #         dim = len(mean)-1
 #         sigma = 0.4
@@ -105,17 +115,17 @@ class BestFitPositionGenerator(object):
 #         print ""
 #         fitter = ParaboloidFitter(fswarm, pso.gbest, True)
 #         mean, _cov = fitter.fit()
-        sigma = numpy.sqrt(numpy.diag(_cov))
-        print("=> found sigma:", sigma)
+        # sigma = numpy.sqrt(numpy.diag(_cov))
+        # print("=> found sigma:", sigma)
         
 #        fitter = ParaboloidFitter(pso.swarm, pso.gbest)
 #        mean, _cov = fitter.fit()
 #        sigma = numpy.sqrt(numpy.diag(_cov))
 #        print "=> found sigma:", sigma
         
-        samples = numpy.random.multivariate_normal(mean, _cov, self.sampler.nwalkers)
+#        samples = numpy.random.multivariate_normal(pso.gbest.position, _cov, self.sampler.nwalkers)
 #         print numpy.std(samples, axis=0)
-        return samples
+#        return samples
         
 #         self.sampler.paramValues = pso.gbest.position
 #         self.sampler.paramWidths = self.sampler.paramValues * self.SPREAD_FACTOR
@@ -126,11 +136,11 @@ class BestFitPositionGenerator(object):
         
         
     
-    def get_particle_count(self):
-        """
-        Generates the number of particles to use by using a logarithmic function of the parameter count
-        """
-        return int(self.MIN_PARTICLE_COUNT + self.MIN_PARTICLE_COUNT*numpy.log(self.sampler.paramCount))
+    # def get_particle_count(self):
+    #     """
+    #     Generates the number of particles to use by using a logarithmic function of the parameter count
+    #     """
+    #     return int(self.MIN_PARTICLE_COUNT + self.MIN_PARTICLE_COUNT*numpy.log(self.sampler.paramCount))
     
     def __str__(self, *args, **kwargs):
         return "BestFitPositionGenerator: particleCount=%s, mpi=%s, threads=%s"%(self.particleCount, self.mpi, self.threads)
@@ -144,17 +154,17 @@ class BestFitPositionGenerator(object):
             f.flush()
                         
     def _storeFit(self, gbest, _cov):
-        with open(self.sampler.filePrefix+self.BEST_INFO_FILE_NAME, "w") as f:
-            f.write("#Best fit: %s\n"%(gbest.fitness))
-            f.write(", ".join([str(i) for i in gbest.position]))
-            f.write("\n#Estimated covariance matrix:\n")
-            for row in _cov:
-                f.write ("[" + ",  ".join([str(i) for i in row]) + "]\n")
+            with open(self.filePrefix+self.BEST_INFO_FILE_NAME, "w") as f:
+                f.write("#Best fit: %s\n"%(gbest.fitness))
+                f.write("\t".join([str(i) for i in gbest.position]))
+                f.write("\n#Estimated covariance matrix:\n")
+                for row in _cov:
+                    f.write ("\t".join([str(i) for i in row]) + "\n")
 
     def _storeSwarm(self, swarm):
-        with open(self.sampler.filePrefix+"swarm", "w") as f:
-            for particle in swarm:
-                f.write(str(particle.fitness))
-                f.write("\t")
-                f.write("\t".join([str(p) for p in particle.position]))
-                f.write("\n")
+            with open(self.filePrefix+"_swarm.out", "w") as f:
+                for particle in swarm:
+                    f.write(str(particle.fitness))
+                    f.write("\t")
+                    f.write("\t".join([str(p) for p in particle.position]))
+                    f.write("\n")

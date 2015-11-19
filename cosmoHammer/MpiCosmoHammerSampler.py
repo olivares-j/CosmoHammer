@@ -2,7 +2,7 @@
 from cosmoHammer import CosmoHammerSampler
 
 from cosmoHammer.util.SampleFileUtil import SampleFileUtil
-from cosmoHammer.util.MpiUtil import MpiPool, mpiBCast
+from cosmoHammer.util.MpiUtil import MpiPool, mpiBCast,mpiMean
 
 class MpiCosmoHammerSampler(CosmoHammerSampler):
     """
@@ -43,7 +43,7 @@ class MpiCosmoHammerSampler(CosmoHammerSampler):
         Starts the sampling process. The master node (mpi rank = 0) persists the result to the disk
         """
         p0 = mpiBCast(p0)
-        
+
         self.log("MPI Process rank "+ str(self.rank)+" starts sampling")
         return super(MpiCosmoHammerSampler, self).sampleBurnin(p0);
    
@@ -88,3 +88,10 @@ class MpiCosmoHammerSampler(CosmoHammerSampler):
         Returns true if the rank is 0
         """
         return self.pool.isMaster()
+
+    def gather(self,value):
+        """
+        Returns the value. Can be overridden with MPI
+        """
+        #if(self.isMaster()):
+        return mpiMean(value)

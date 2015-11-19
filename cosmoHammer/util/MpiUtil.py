@@ -2,6 +2,7 @@ import itertools
 import os
 from cosmoHammer import getLogger
 import time
+import numpy as np
 
 # If mpi4py is installed, import it.
 try:
@@ -57,6 +58,17 @@ def mpiBCast(value):
     """
     getLogger().debug("Rank: %s, pid: %s MpiPool: bcast", MPI.COMM_WORLD.Get_rank(), os.getpid())
     return MPI.COMM_WORLD.bcast(value)
+
+def mpiMean(value):
+    """
+    Mpi gather the value and Returns the value from the master (rank = 0).
+    """
+    total =  np.zeros_like(value)
+    value = np.asarray(value)
+    getLogger().debug("Rank: %s, pid: %s MpiPool: reduce", MPI.COMM_WORLD.Get_rank(), os.getpid())
+    MPI.COMM_WORLD.Reduce([value, MPI.DOUBLE],[total, MPI.DOUBLE],op = MPI.SUM,root = 0)
+    return total/MPI.COMM_WORLD.Get_size()
+
 
 def splitList(list, n):
     """

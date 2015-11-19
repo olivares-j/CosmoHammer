@@ -38,12 +38,17 @@ class CosmoHammerSampler(object):
 
     def __init__(self, params, likelihoodComputationChain, filePrefix, walkersRatio, burninIterations, 
                  sampleIterations, stopCriteriaStrategy=None, initPositionGenerator=None, 
-                 storageUtil=None, threadCount=1, reuseBurnin=False, logLevel=logging.INFO, pool=None):
+                 storageUtil=None, threadCount=1, reuseBurnin=False, initPositions=None,
+                 logLevel=logging.INFO, pool=None):
         """
         CosmoHammer sampler implementation
 
         """
-        self.params = params
+
+        self.paramValues = params[:,0]
+        self.paramMins   = params[:,1]
+        self.paramMaxs   = params[:,2]
+        self.paramWidths = params[:,3]
         self.likelihoodComputationChain = likelihoodComputationChain
         self.walkersRatio = walkersRatio
         self.reuseBurnin = reuseBurnin
@@ -53,17 +58,20 @@ class CosmoHammerSampler(object):
         self.nwalkers = self.paramCount*walkersRatio
         self.burninIterations = burninIterations
         self.sampleIterations = sampleIterations
+        self.initPositions    = initPositions
         
-        assert likelihoodComputationChain is not None, "The sampler needs a chain"
+        
         assert sampleIterations > 0, "CosmoHammer needs to sample for at least one iterations"
-        
-        if not hasattr(self.likelihoodComputationChain, "params"):
-            self.likelihoodComputationChain.params = params
+
+        if self.initPositions is not None:
+            assert len(initPositions) == self.nwalkers, "If you want to use initPositions, their number must be equal to that of walkers"
+            assert len(initPositions[0]) == self.paramCount, "Mismatch in dimensions of initPositions and parameters"
+
         
         # setting up the logging
         self._configureLogging(filePrefix+c.LOG_FILE_SUFFIX, logLevel)
         
-        if self.isMaster(): self.log("Using CosmoHammer "+str(cosmoHammer.__version__))
+        self.log("Using CosmoHammer "+str(cosmoHammer.__version__))
         
         # The sampler object
         self._sampler = self.createEmceeSampler(likelihoodComputationChain, pool=pool)
@@ -87,24 +95,26 @@ class CosmoHammerSampler(object):
     
     
     def _configureLogging(self, filename, logLevel):
-        logger = getLogger()
-        logger.setLevel(logLevel)
-        fh = logging.FileHandler(filename, "w")
-        fh.setLevel(logLevel)
-        # create console handler with a higher log level
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.ERROR)
-        # create formatter and add it to the handlers
-        formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
-        fh.setFormatter(formatter)
-        ch.setFormatter(formatter)
-        # add the handlers to the logger
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-        logger.addHandler(fh)
-        logger.addHandler(ch)
-#         logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', 
-#                             filename=filename, filemode='w', level=logLevel)
+        if self.isMaster():
+            # create logger with 'spam_application'
+            logger = getLogger()
+            logger.setLevel(logLevel)
+            # create file handler which logs even debug messages
+    #         fh = ConcurrentRotatingFileHandler(filename, "w", 512*1024, 5, supress_abs_warn=True)
+            fh = logging.FileHandler(filename, "w")
+            fh.setLevel(logLevel)
+            # create console handler with a higher log level
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.ERROR)
+            # create formatter and add it to the handlers
+            formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
+            fh.setFormatter(formatter)
+            ch.setFormatter(formatter)
+            # add the handlers to the logger
+            logger.addHandler(fh)
+            logger.addHandler(ch)
+    #         logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', 
+    #                             filename=filename, filemode='w', level=logLevel)
         
         
     def createStopCriteriaStrategy(self):
@@ -125,20 +135,12 @@ class CosmoHammerSampler(object):
         """
         return SampleBallPositionGenerator()
     
-    @property
-    def paramValues(self):
-        return self.params[:,0]
-    
-    @property
-    def paramWidths(self):
-        return self.params[:,3]
-    
     def startSampling(self):
         """
         Launches the sampling
         """
+        self.log(self.__str__())
         try:
-            if self.isMaster(): self.log(self.__str__())
             if(self.burninIterations>0):
                 
                 if(self.reuseBurnin):
@@ -162,7 +164,14 @@ class CosmoHammerSampler(object):
     
             # Print out the mean acceptance fraction. In general, acceptance_fraction
             # has an entry for each walker
-            self.log("Mean acceptance fraction:"+ str(round(np.mean(self._sampler.acceptance_fraction), 4)))
+            pmacc = np.mean(self._sampler.acceptance_fraction)
+            mean_acc = self.gather(pmacc)
+
+            pmacor = np.mean(self._sampler.get_autocorr_time())
+            mean_acor = self.gather(pmacor)
+            
+            self.log("Mean acceptance fraction:"+ str(round(mean_acc, 4)))
+            self.log("Autocorrelation time:" + str(round(mean_acor, 4)))
         finally:
             if self._sampler.pool is not None:
                 try:
@@ -180,6 +189,7 @@ class CosmoHammerSampler(object):
         """
         loads the burn in form the file system
         """
+        
         self.log("reusing previous burn in")
 
         pos = self.storageUtil.importFromFile(self.filePrefix+c.BURNIN_SUFFIX)[-self.nwalkers:]
@@ -195,14 +205,26 @@ class CosmoHammerSampler(object):
     def startSampleBurnin(self):
         """
         Runs the sampler for the burn in
-        """
+        """ 
         self.log("start burn in")
+        if self.initPositions is not None:
+                    p0 = self.initPositions
+        else:
+            p0 = self.createInitPos()
         start = time.time()
-        p0 = self.createInitPos()
         pos, prob, rstate, data = self.sampleBurnin(p0)
         end = time.time()
+        
+        pmacc = np.mean(self._sampler.acceptance_fraction)
+        mean_acc = self.gather(pmacc)
+
+        pmacor = np.mean(self._sampler.get_autocorr_time())
+        mean_acor = self.gather(pmacor)
+
         self.log("burn in sampling done! Took: " + str(round(end-start,4))+"s")
-        self.log("Mean acceptance fraction for burn in:" + str(round(np.mean(self._sampler.acceptance_fraction), 4)))
+        self.log("Mean acceptance fraction for burn in:" + str(round(mean_acc, 4)))
+        self.log("Autocorrelation time for burn in:" + str(round(mean_acor, 4)))
+
         
         self.resetSampler()
         
@@ -213,10 +235,10 @@ class CosmoHammerSampler(object):
         """
         Resets the emcee sampler in the master node
         """
-        if self.isMaster():
-            self.log("Reseting emcee sampler")
-            # Reset the chain to remove the burn-in samples.
-            self._sampler.reset()        
+        
+        self.log("Reseting emcee sampler")
+        # Reset the chain to remove the burn-in samples.
+        self._sampler.reset()        
     
     
     
@@ -234,8 +256,8 @@ class CosmoHammerSampler(object):
                 
             counter = counter + 1
 
+        self.log("storing random state")
         if self.isMaster():
-            self.log("storing random state")
             self.storageUtil.storeRandomState(self.filePrefix+c.BURNIN_STATE_SUFFIX, rstate)
             
         return pos, prob, rstate, datas
@@ -248,8 +270,9 @@ class CosmoHammerSampler(object):
         counter = 1
         for pos, prob, _, datas in self._sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, 
                                                         blobs0=datas, iterations=self.sampleIterations):
+                                                        #,storechain=False):
+            self.log("Iteration done. Persisting", logging.DEBUG)
             if self.isMaster():
-                self.log("Iteration done. Persisting", logging.DEBUG)
                 self.storageUtil.persistSamplingValues(pos, prob, datas)
                 
                 if(self.stopCriteriaStrategy.hasFinished()):
@@ -267,18 +290,25 @@ class CosmoHammerSampler(object):
         """
         return True
 
+    def gather(self,value):
+        """
+        Returns the value. Can be overridden with MPI
+        """
+        return value
+
     def log(self, message, level=logging.INFO):
         """
         Logs a message to the logfile
         """
-        getLogger().log(level, message)
+        if self.isMaster():
+            getLogger().log(level, message)
     
     
     def createEmceeSampler(self, callable, **kwargs):
         """
         Factory method to create the emcee sampler
-        """
-        if self.isMaster(): self.log("Using emcee "+str(emcee.__version__))
+        """ 
+        self.log("Using emcee "+str(emcee.__version__))
         return emcee.EnsembleSampler(self.nwalkers, 
                                      self.paramCount, 
                                      callable, 
@@ -290,6 +320,7 @@ class CosmoHammerSampler(object):
         Factory method to create initial positions
         """
         return self.initPositionGenerator.generate()
+        #return emcee.utils.sample_ball(self.paramValues, self.paramWidths, self.nwalkers)
 
 
     def getChain(self):

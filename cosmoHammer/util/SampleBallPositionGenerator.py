@@ -1,6 +1,5 @@
 
-import numpy as np
-
+import numpy
 
 class SampleBallPositionGenerator(object):
     """
@@ -17,8 +16,18 @@ class SampleBallPositionGenerator(object):
         """
             generates the positions
         """
-        
-        return [self.sampler.paramValues+np.random.normal(size=self.sampler.paramCount)*self.sampler.paramWidths for i in range(self.sampler.nwalkers)]
+
+        #samples = numpy.random.multivariate_normal(pso.gbest.position, _cov, self.sampler.nwalkers)
+#         print numpy.std(samples, axis=0)
+#        return samples
+        # The first walker carries the inital parameter values
+        # return np.row_stack([self.sampler.paramValues,[self.sampler.paramValues+np.random.normal(size=
+        #     self.sampler.paramCount)*self.sampler.paramWidths for i in range((self.sampler.nwalkers-1))]])
+
+        return numpy.row_stack([self.sampler.paramValues,
+            numpy.random.multivariate_normal(self.sampler.paramValues,
+                            numpy.diag(self.sampler.paramWidths),
+                            self.sampler.nwalkers-1)])
     
     def __str__(self, *args, **kwargs):
         return "SampleBallPositionGenerator"

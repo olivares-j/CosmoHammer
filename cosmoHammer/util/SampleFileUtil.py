@@ -41,7 +41,19 @@ class SampleFileUtil(object):
 		return state
 
 	def persistBurninValues(self, pos, prob, data):
-		self.persistValues(self.samplesFileBurnin, self.probFileBurnin, pos, prob, data)
+		#self.persistValues(self.samplesFileBurnin, self.probFileBurnin, pos, prob, data)
+		"""
+		Modified to write just pos and prob (NOT DATAS)
+		Writes the walker positions and the likelihood to the disk
+		"""
+		self.samplesFileBurnin.write("\n".join(["\t".join([str(q) for q in p]) for p in pos]))
+		self.samplesFileBurnin.write("\n")
+		self.samplesFileBurnin.flush()
+		
+		self.probFileBurnin.write("\n".join([str(p) for p in prob]))
+		self.probFileBurnin.write("\n")
+		self.probFileBurnin.flush();
+		
 		
 	def persistSamplingValues(self, pos, prob, data):
 		self.persistValues(self.samplesFile, self.probFile, pos, prob, data)

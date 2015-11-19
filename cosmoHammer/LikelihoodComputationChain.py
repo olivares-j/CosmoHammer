@@ -6,7 +6,6 @@ import os
 from cosmoHammer.ChainContext import ChainContext
 from cosmoHammer.exceptions import LikelihoodComputationException
 from cosmoHammer import getLogger
-from cosmoHammer.util import Params
 
 class LikelihoodComputationChain(object):
     """
@@ -21,6 +20,7 @@ class LikelihoodComputationChain(object):
             lower bound for the parameters
         :param max: array
             upper bound for the parameters
+
         """
         self.min = min
         self.max = max
@@ -111,11 +111,6 @@ class LikelihoodComputationChain(object):
         """
         Returns a new instance of a chain context 
         """
-        try:
-            p = Params(*zip(self.params.keys, p))
-        except Exception:
-            # no params or params has no keys
-            pass
         return ChainContext(self, p)
     
     def invokeCoreModules(self, ctx):
