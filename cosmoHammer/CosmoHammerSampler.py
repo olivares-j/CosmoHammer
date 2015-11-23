@@ -1,6 +1,6 @@
 from __future__ import print_function, division, absolute_import, unicode_literals
 
-import emcee
+import myemcee as emcee
 import numpy as np
 import logging
 import time
@@ -248,7 +248,7 @@ class CosmoHammerSampler(object):
         """
         
         counter = 1
-        for pos, prob, rstate, datas in self._sampler.sample(p0, iterations=self.burninIterations):
+        for pos, prob, rstate, datas in self._sampler.sample(p0, iterations=self.burninIterations,storechain=False):
             if self.isMaster():
                 self.storageUtil.persistBurninValues(pos, prob, datas)
                 if(counter%10==0):
@@ -269,8 +269,8 @@ class CosmoHammerSampler(object):
         """
         counter = 1
         for pos, prob, _, datas in self._sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, 
-                                                        blobs0=datas, iterations=self.sampleIterations):
-                                                        #,storechain=False):
+                                                        blobs0=datas, iterations=self.sampleIterations,
+                                                        storechain=False):
             self.log("Iteration done. Persisting", logging.DEBUG)
             if self.isMaster():
                 self.storageUtil.persistSamplingValues(pos, prob, datas)
