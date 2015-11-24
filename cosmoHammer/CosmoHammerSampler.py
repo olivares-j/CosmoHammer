@@ -167,11 +167,11 @@ class CosmoHammerSampler(object):
             pmacc = np.mean(self._sampler.acceptance_fraction)
             mean_acc = self.gather(pmacc)
 
-            pmacor = np.mean(self._sampler.get_autocorr_time())
-            mean_acor = self.gather(pmacor)
+            # pmacor = np.mean(self._sampler.get_autocorr_time())
+            # mean_acor = self.gather(pmacor)
             
             self.log("Mean acceptance fraction:"+ str(round(mean_acc, 4)))
-            self.log("Autocorrelation time:" + str(round(mean_acor, 4)))
+            # self.log("Autocorrelation time:" + str(round(mean_acor, 4)))
         finally:
             if self._sampler.pool is not None:
                 try:
@@ -218,12 +218,12 @@ class CosmoHammerSampler(object):
         pmacc = np.mean(self._sampler.acceptance_fraction)
         mean_acc = self.gather(pmacc)
 
-        pmacor = np.mean(self._sampler.get_autocorr_time())
-        mean_acor = self.gather(pmacor)
+        # pmacor = np.mean(self._sampler.get_autocorr_time())
+        # mean_acor = self.gather(pmacor)
 
         self.log("burn in sampling done! Took: " + str(round(end-start,4))+"s")
         self.log("Mean acceptance fraction for burn in:" + str(round(mean_acc, 4)))
-        self.log("Autocorrelation time for burn in:" + str(round(mean_acor, 4)))
+        # self.log("Autocorrelation time for burn in:" + str(round(mean_acor, 4)))
 
         
         self.resetSampler()
