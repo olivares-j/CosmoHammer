@@ -9,6 +9,7 @@ from math import floor
 import math
 import multiprocessing
 import numpy
+import pandas
 
 class ParticleSwarmOptimizer(object):
     '''
@@ -38,7 +39,7 @@ class ParticleSwarmOptimizer(object):
     '''
 
 
-    def __init__(self, func, low, high, particleCount=25, threads=1, pool=None):
+    def __init__(self, func, low, high, particleCount=25, threads=1, pool=None, fSwarm=None):
         '''
         Constructor
         '''
@@ -53,8 +54,12 @@ class ParticleSwarmOptimizer(object):
             self.pool = multiprocessing.Pool(self.threads)
         
         self.paramCount = len(self.low)
+
+        if fSwarm is None :
+            self.swarm = self._initSwarm()
+        else:
+            self.swarm = self._readSwarm(fSwarm)
         
-        self.swarm = self._initSwarm()
         self.gbest = Particle.create(self.paramCount)
         
     def _initSwarm(self):
@@ -62,6 +67,18 @@ class ParticleSwarmOptimizer(object):
         for _ in range(self.particleCount):
             swarm.append(Particle(numpy.random.uniform(self.low, self.high, size=self.paramCount), numpy.zeros(self.paramCount)))
         
+        return swarm
+
+    def _readSwarm(self,fswrm):
+        # The file must have, as second entry, the fitness, the rest must be particle position.
+        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))
+        swarm = []
+        for i in range(self.particleCount):
+            swarm.append(Particle(position=nswarm[-i,2:],velocity=numpy.zeros(self.paramCount),fitness=nswarm[-i,1]))
+        
+        # for particle in swarm:
+        #     print(particle.fitness)
+        # stop
         return swarm
         
     def sample(self, maxIter=1000, c1=1.49618, c2=1.49618, p=0.7, m=10**-3, n=10**-2):
