@@ -20,13 +20,13 @@ class UniformIntervalPositionGenerator(object):
         """
         #print self.sampler.nwalkers
         # The first walker carries the inital parameter values
-        pos=np.row_stack([self.sampler.paramValues,[np.random.uniform(
+        pos=np.row_stack([np.random.uniform(
             low=self.sampler.paramMins,
             high=self.sampler.paramMaxs,
             size=self.sampler.paramCount) 
-            for i in range((self.sampler.nwalkers-1))]])
-        if (pos < self.sampler.paramMins).any(): sys.exit("Position ERROR")
-        if (pos > self.sampler.paramMaxs).any(): sys.exit("Position ERROR")
+            for i in range((self.sampler.nwalkers))])
+        if (pos < self.sampler.paramMins).any(): sys.exit("Position ERROR Mins")
+        if (pos > self.sampler.paramMaxs).any(): sys.exit("Position ERROR Maxs")
         return pos
     
     def __str__(self, *args, **kwargs):

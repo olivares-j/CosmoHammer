@@ -150,7 +150,10 @@ class CosmoHammerSampler(object):
                 else:
                     pos, prob, rstate, datas = self.startSampleBurnin()
             else:
-                pos = self.createInitPos()
+                if self.initPositions is not None:
+                    pos = self.initPositions
+                else:
+                    pos = self.createInitPos()
                 prob = None
                 rstate = None
                 datas = None
@@ -164,8 +167,10 @@ class CosmoHammerSampler(object):
     
             # Print out the mean acceptance fraction. In general, acceptance_fraction
             # has an entry for each walker
+            
             pmacc = np.mean(self._sampler.acceptance_fraction)
             mean_acc = self.gather(pmacc)
+            # print(mean_acc)
 
             # pmacor = np.mean(self._sampler.get_autocorr_time())
             # mean_acor = self.gather(pmacor)
@@ -214,9 +219,10 @@ class CosmoHammerSampler(object):
         start = time.time()
         pos, prob, rstate, data = self.sampleBurnin(p0)
         end = time.time()
-        
+
         pmacc = np.mean(self._sampler.acceptance_fraction)
         mean_acc = self.gather(pmacc)
+        # print(mean_acc)
 
         # pmacor = np.mean(self._sampler.get_autocorr_time())
         # mean_acor = self.gather(pmacor)
@@ -238,7 +244,7 @@ class CosmoHammerSampler(object):
         
         self.log("Reseting emcee sampler")
         # Reset the chain to remove the burn-in samples.
-        self._sampler.reset()        
+        self._sampler.reset()   
     
     
     
@@ -268,9 +274,10 @@ class CosmoHammerSampler(object):
         Starts the sampling process
         """
         counter = 1
-        for pos, prob, _, datas in self._sampler.sample(burninPos, lnprob0=burninProb, rstate0=burninRstate, 
-                                                        blobs0=datas, iterations=self.sampleIterations,
-                                                        storechain=False):
+        for pos, prob, _, datas in self._sampler.sample(burninPos, iterations=self.sampleIterations,storechain=False):
+                                                        # lnprob0=burninProb, 
+                                                        # rstate0=burninRstate, 
+                                                        # blobs0=datas):
             self.log("Iteration done. Persisting", logging.DEBUG)
             if self.isMaster():
                 self.storageUtil.persistSamplingValues(pos, prob, datas)
@@ -335,7 +342,6 @@ class CosmoHammerSampler(object):
         """
         desc = "Sampler: " + str(type(self))+"\n" \
                 "configuration: \n" \
-                "  Params: " +str(self.paramValues)+"\n" \
                 "  Burnin iterations: " +str(self.burninIterations)+"\n" \
                 "  Samples iterations: " +str(self.sampleIterations)+"\n" \
                 "  Walkers ratio: " +str(self.walkersRatio)+"\n" \

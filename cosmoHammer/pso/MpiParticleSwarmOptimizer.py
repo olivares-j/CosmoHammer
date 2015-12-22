@@ -19,10 +19,13 @@ class MpiParticleSwarmOptimizer(ParticleSwarmOptimizer):
     PSO with support for MPI to distribute the workload over multiple nodes
     """
     
-    def __init__(self, func, low, high, particleCount=25, threads=1):
+    def __init__(self, func, low, high, particleCount=25, threads=1, fSwarm=None):
         self.threads = threads
         pool = MpiPool(self._getMapFunction())
-        super(MpiParticleSwarmOptimizer, self).__init__(func, low, high, particleCount=particleCount, pool=pool)
+        super(MpiParticleSwarmOptimizer, self).__init__(func, low, high, 
+            particleCount=particleCount, 
+            pool=pool,
+            fSwarm=fSwarm)
         
         
     def _getMapFunction(self):
