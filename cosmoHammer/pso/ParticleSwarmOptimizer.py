@@ -84,7 +84,7 @@ class ParticleSwarmOptimizer(object):
 
     def _readSwarm(self,fswrm):
         # The file must have, as second entry, the fitness, the rest must be particle position.
-        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))
+        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))[0:150,:]
         swarm = []
         for i in range(self.particleCount):
             swarm.append(Particle(position=nswarm[-i,2:],
@@ -122,8 +122,8 @@ class ParticleSwarmOptimizer(object):
                 print("max iteration reached! stoping")
                 return
             #--------------------------------------
-            if(self._convergedFit(p=p, m=m)):
-                self._run_emcee(i,it=10)
+            #if (i==0):
+            #	self._run_emcee(i,it=10)
             #--------------------------------------
 
             if(self._converged(i, p=p,m=m, n=n)):
@@ -141,8 +141,8 @@ class ParticleSwarmOptimizer(object):
                 c2 = 1.49618
                 w  = 0.7298
                 #----- This is my pso. 0.2% of the realisations will produce a velocity factor grater than 1
-                w  = w + numpy.absolute(numpy.random.uniform(0,0.09006,size=self.paramCount))
-                #----------------------------------------------------------
+                # w  = w + numpy.absolute(numpy.random.uniform(0,0.09006,size=self.paramCount))
+		#----------------------------------------------------------
                 part_vel = w * particle.velocity
                 cog_vel = c1 * numpy.random.uniform(0,1,size=self.paramCount) * (particle.pbest.position - particle.position)
                 soc_vel = c2 * numpy.random.uniform(0,1,size=self.paramCount) * (self.gbest.position - particle.position)
@@ -250,87 +250,86 @@ class ParticleSwarmOptimizer(object):
         return True   
 
     def _run_emcee(self,current_it,it=10):
-        print("Inside emcee. Iteration ",current_it)
-        p = numpy.array([part.position for part in self.swarm])
-        lnprob = numpy.array([part.fitness  for part in self.swarm])
-        for j in range(int(it)):
-            # print("Iteration ",j)
-            #--------- modified version -------
-            aranged = numpy.arange(self.particleCount)
-            halfk = int(self.particleCount/2)
-            numpy.random.shuffle(aranged)
-            first  = aranged[0:halfk]
-            second = aranged[halfk:self.particleCount]
-            #----------------------------------
+         print("Inside emcee. Iteration PSO: ",current_it)
+         p = numpy.array([part.position for part in self.swarm])
+         lnprob = numpy.array([part.fitness  for part in self.swarm])
+         for j in range(int(it)):
+             print("Iteration ",j)
+             #--------- modified version -------
+             aranged = numpy.arange(self.particleCount)
+             halfk = int(self.particleCount/2)
+             numpy.random.shuffle(aranged)
+             first  = aranged[0:halfk]
+             second = aranged[halfk:self.particleCount]
+             #----------------------------------
 
-            for S0, S1 in [(first, second), (second, first)]:
-                q, newlnp, acc = self._propose_stretch(p[S0], p[S1], lnprob[S0])
-                if numpy.any(acc):
-                            #------ modified version ---------
-                            temp = lnprob[S0]
-                            temp[acc] = newlnp[acc]
-                            lnprob[S0]= temp
+             for S0, S1 in [(first, second), (second, first)]:
+                 q, newlnp, acc = self._propose_stretch(p[S0], p[S1], lnprob[S0])
+                 if numpy.any(acc):
+                             #------ modified version ---------
+                             temp = lnprob[S0]
+                             temp[acc] = newlnp[acc]
+                             lnprob[S0]= temp
 
-                            temp = p[S0]
-                            temp[acc]= q[acc]
-                            p[S0]=temp
-        l = 0
-        for particle in self.swarm:
-            particle.position = p[l]
-            particle.fitness  = lnprob[l]
-            l +=1
+                             temp = p[S0]
+                             temp[acc]= q[acc]
+                             p[S0]=temp
+         l = 0
+         for particle in self.swarm:
+             particle.position = p[l]
+             particle.fitness  = lnprob[l]
+             l +=1
+         pass
 
-        pass
+    def _propose_stretch(self,p0, p1, lnprob0,a=2.0):
+         """
+    #     Propose a new position for one sub-ensemble given the positions of
+    #     another.
 
-    def _propose_stretch(self,p0, p1, lnprob0,a=1.5):
-        """
-        Propose a new position for one sub-ensemble given the positions of
-        another.
+    #     :param p0:
+    #         The positions from which to jump.
 
-        :param p0:
-            The positions from which to jump.
+    #     :param p1:
+    #         The positions of the other ensemble.
 
-        :param p1:
-            The positions of the other ensemble.
+    #     :param lnprob0:
+    #         The log-probabilities at ``p0``.
 
-        :param lnprob0:
-            The log-probabilities at ``p0``.
+    #     This method returns:
 
-        This method returns:
+    #     * ``q`` - The new proposed positions for the walkers in ``ensemble``.
 
-        * ``q`` - The new proposed positions for the walkers in ``ensemble``.
+    #     * ``newlnprob`` - The vector of log-probabilities at the positions
+    #       given by ``q``.
 
-        * ``newlnprob`` - The vector of log-probabilities at the positions
-          given by ``q``.
+    #     * ``accept`` - A vector of type ``bool`` indicating whether or not
+    #       the proposed position for each walker should be accepted.
 
-        * ``accept`` - A vector of type ``bool`` indicating whether or not
-          the proposed position for each walker should be accepted.
+    #     * ``blob`` - The new meta data blobs or ``None`` if nothing was
+    #       returned by ``lnprobfn``.
 
-        * ``blob`` - The new meta data blobs or ``None`` if nothing was
-          returned by ``lnprobfn``.
+         """
+         s = numpy.atleast_2d(p0)
+         Ns = len(s)
+         c = numpy.atleast_2d(p1)
+         Nc = len(c)
 
-        """
-        s = numpy.atleast_2d(p0)
-        Ns = len(s)
-        c = numpy.atleast_2d(p1)
-        Nc = len(c)
+         # Generate the vectors of random numbers that will produce the
+         # proposal.
+         zz = ((a - 1.) * numpy.random.rand(Ns) + 1) ** 2. / a
+         rint = numpy.random.randint(Nc, size=(Ns,))
 
-        # Generate the vectors of random numbers that will produce the
-        # proposal.
-        zz = ((a - 1.) * numpy.random.rand(Ns) + 1) ** 2. / a
-        rint = numpy.random.randint(Nc, size=(Ns,))
+         # Calculate the proposed positions and the log-probability there.
+         q = c[rint] - zz[:, numpy.newaxis] * (c[rint] - s)
+         #--new prob 
+         results = self.pool.map(self.func, q)
+         newlnprob = numpy.array([l[0] for l in results])
 
-        # Calculate the proposed positions and the log-probability there.
-        q = c[rint] - zz[:, numpy.newaxis] * (c[rint] - s)
-        #--new prob 
-        results = self.pool.map(self.func, q)
-        newlnprob = numpy.array([l[0] for l in results])
+         # Decide whether or not the proposals should be accepted.
+         lnpdiff = (self.paramCount - 1.) * numpy.log(zz) + newlnprob - lnprob0
+         accept = (lnpdiff > numpy.log(numpy.random.rand(len(lnpdiff))))
 
-        # Decide whether or not the proposals should be accepted.
-        lnpdiff = (self.paramCount - 1.) * numpy.log(zz) + newlnprob - lnprob0
-        accept = (lnpdiff > numpy.log(numpy.random.rand(len(lnpdiff))))
-
-        return q, newlnprob,accept
+         return q, newlnprob,accept
 
 class Particle(object):
     """
