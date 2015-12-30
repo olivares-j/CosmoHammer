@@ -43,7 +43,7 @@ class ParticleSwarmOptimizer(object):
         '''
         Constructor
         '''
-        print('My PSO')
+       
         self.func = func
         self.low = low
         self.high = high
@@ -84,7 +84,7 @@ class ParticleSwarmOptimizer(object):
 
     def _readSwarm(self,fswrm):
         # The file must have, as second entry, the fitness, the rest must be particle position.
-        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))[0:150,:]
+        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))
         swarm = []
         for i in range(self.particleCount):
             swarm.append(Particle(position=nswarm[-i,2:],
