@@ -39,9 +39,10 @@ class ParticleSwarmOptimizer(object):
     '''
 
 
-    def __init__(self, func, low, high, particleCount=25, threads=1, pool=None, fSwarm=None):
+    def __init__(self, func, low, high, particleCount=25,req=1e-10, threads=1, pool=None, fSwarm=None):
         '''
         Constructor
+        req : distance at which repultion and atraction are equal.
         '''
        
         self.func = func
@@ -50,9 +51,26 @@ class ParticleSwarmOptimizer(object):
         self.particleCount = particleCount
         self.threads = threads
         self.pool = pool
+        #----- This is PSO of Clerc and Kennedy 2002 
+        self.c1 = 1.49618
+        self.c2 = 1.49618
+        self.w  = 0.7298
+        #---- modified acccelerated PSO of Blackwell Bently  ------
+        self.dcore   = 1e-50  # min distance at wich accelerations turns to zero to avoid infinities.
+        self.daction = 1e-3   # max distance at wich accelerations turns to zero.
+        self.c3 = (req/(0.5*(self.c1+self.c2)))**2  # constant to balance forces.
         
         if self.threads > 1 and self.pool is None:
             self.pool = multiprocessing.Pool(self.threads)
+
+
+        # If the `pool` property of the pso has been set (i.e. we want
+        # to use `multiprocessing`), use the `pool`'s map method. Otherwise,
+        # just use the built-in `map` function.
+        if self.pool is not None:
+            self.mapFunction = self.pool.map
+        else:
+            self.mapFunction = map
         
         self.paramCount = len(self.low)
 
@@ -63,17 +81,6 @@ class ParticleSwarmOptimizer(object):
             print("Position read")
         
         self.gbest = Particle.create(self.paramCount)
-        # for particle in self.swarm:
-        #     print(particle.position)
-        # stop
-
-        # self.gbest = Particle(numpy.random.uniform(self.low, self.high, size=self.paramCount), 
-        #     numpy.zeros(self.paramCount),-numpy.Inf)
-
-        # print(self.gbest.position.shape)
-        # for particle in self.swarm:
-        #     print(particle.position.shape)
-        # stop
         
     def _initSwarm(self):
         swarm = []
@@ -84,11 +91,15 @@ class ParticleSwarmOptimizer(object):
 
     def _readSwarm(self,fswrm):
         # The file must have, as second entry, the fitness, the rest must be particle position.
-        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))
+        nswarm = numpy.array(pandas.read_csv(fswrm,sep='\t',comment='#',header=None))#[1:(10000*30),]
         swarm = []
         for i in range(self.particleCount):
-            swarm.append(Particle(position=nswarm[-i,2:],
-                                  velocity=numpy.zeros(self.paramCount)))
+            swarm.append(Particle(
+                position=nswarm[-i,2:],
+                velocity=numpy.zeros(self.paramCount)))
+        # for i,part in enumerate(swarm):
+        #     if i>47 and i < 54 :
+        #         part.position = part.position*numpy.random.uniform(0.9,1.1) 
         return swarm
         
     def sample(self, maxIter=1000, c1=1.193, c2=1.193, p=0.7, m=10**-3, n=10**-2):
@@ -121,34 +132,45 @@ class ParticleSwarmOptimizer(object):
             if(i>=maxIter):
                 print("max iteration reached! stoping")
                 return
-            #--------------------------------------
-            #if (i==0):
-            #	self._run_emcee(i,it=10)
-            #--------------------------------------
 
             if(self._converged(i, p=p,m=m, n=n)):
                 if(self.isMaster()):
                     print("converged after %s iterations!"%i)
                     print("best fit found: ", self.gbest.fitness, self.gbest.position)
                 return
+
+            #--------------- acceleration terms due to charged particles ------
+            p0    = numpy.zeros((self.particleCount,self.paramCount))
+            for i,particle in enumerate(self.swarm):
+                p0[i] = particle.position
+            acc  = numpy.zeros((self.particleCount,self.paramCount)) 
+            rho  = numpy.zeros((self.particleCount,self.paramCount)) 
+            for i in range(self.particleCount):
+                for j in range(self.particleCount):
+                    rho[j] = 1.0-(p0[j]/p0[i])
+                # non    = numpy.where((numpy.abs(rho) < self.dcore)| (numpy.abs(rho) > self.daction))
+                non    = numpy.where((numpy.abs(rho) < self.dcore))
+                accs   = numpy.abs(p0)*numpy.sign(rho)*(self.c3*(rho**-1))
+                accs[non] = 0.0
+                acc[i] = numpy.sum(accs,axis=0)
+                # print(acc)
+
+            #-------- COMMON PSO ---------
             
-            
-            for particle in self.swarm:
+            for i,particle in enumerate(self.swarm):
                 #This is a PSO with inertia
                 #w = 0.5 + numpy.random.uniform(0,1,size=self.paramCount)/2
-                #----- This is PSO of Clerc and Kennedy 2002 
-                c1 = 1.49618
-                c2 = 1.49618
-                w  = 0.7298
+                
                 #----- This is my pso. 0.2% of the realisations will produce a velocity factor grater than 1
                 # w  = w + numpy.absolute(numpy.random.uniform(0,0.09006,size=self.paramCount))
 		#----------------------------------------------------------
-                part_vel = w * particle.velocity
-                cog_vel = c1 * numpy.random.uniform(0,1,size=self.paramCount) * (particle.pbest.position - particle.position)
-                soc_vel = c2 * numpy.random.uniform(0,1,size=self.paramCount) * (self.gbest.position - particle.position)
-                particle.velocity = part_vel + cog_vel + soc_vel
-                particle.position = particle.position + particle.velocity
-            
+                part_vel = self.w * particle.velocity
+                cog_vel = self.c1 * numpy.random.uniform(0,1,size=self.paramCount) * (particle.pbest.position - particle.position)
+                soc_vel = self.c2 * numpy.random.uniform(0,1,size=self.paramCount) * (self.gbest.position - particle.position)
+                particle.velocity = part_vel + cog_vel + soc_vel 
+                #---- accelerated PSO ------------
+                particle.position = particle.position + particle.velocity + 0.5*acc[i]
+
             self._get_fitness(self.swarm)
 
             swarm = []
@@ -166,7 +188,7 @@ class ParticleSwarmOptimizer(object):
         :param c1: cognitive weight
         :param c2: social weight
         :param p: stop criterion, percentage of particles to use 
-        :param m: stop criterion, difference between mean fitness and global best
+        :param m: stop criterion, relative difference between mean fitness and global best
         :param n: stop criterion, difference between norm of the particle vector and norm of the global best
 
         :return swarms, gBests: the swarms and the global bests of all iterations
@@ -180,18 +202,9 @@ class ParticleSwarmOptimizer(object):
         
         return swarms, gBests
         
-    def _get_fitness(self,swarm):
-        
-        # If the `pool` property of the pso has been set (i.e. we want
-        # to use `multiprocessing`), use the `pool`'s map method. Otherwise,
-        # just use the built-in `map` function.
-        if self.pool is not None:
-            mapFunction = self.pool.map
-        else:
-            mapFunction = map
-        
+    def _get_fitness(self,swarm):        
         pos = numpy.array([part.position for part in swarm])
-        results =  mapFunction(self.func, pos)
+        results =  self.mapFunction(self.func, pos)
         lnprob = numpy.array([l[0] for l in results])
         for i, particle in enumerate(swarm):
             particle.fitness = lnprob[i]
@@ -201,7 +214,7 @@ class ParticleSwarmOptimizer(object):
 #        print(test)
         fit = self._convergedFit(p=p, m=m)
         if(fit):
-            space = self._convergedSpace(p=p, m=n)
+            space = self._convergedSpace(p=p, n=n)
             return space
         else:
             return False
@@ -210,7 +223,7 @@ class ParticleSwarmOptimizer(object):
         bestSort = numpy.sort([particle.pbest.fitness for particle in self.swarm])[::-1]
         meanFit = numpy.mean(bestSort[1:math.floor(self.particleCount*p)])
         # print( "best , meanFit, ration %",self.gbest.fitness, meanFit, (self.gbest.fitness-meanFit))
-        return ((self.gbest.fitness-meanFit)<m)
+        return (numpy.abs(1.0-numpy.abs(meanFit/self.gbest.fitness)) < m ) 
 
     # def _convergedFit2(self, it, p, m):
     #     bestSort = numpy.sort([particle.pbest.fitness for particle in self.swarm])[::-1]
@@ -221,18 +234,18 @@ class ParticleSwarmOptimizer(object):
     #     #print( "best , meanFit, ration %",self.gbest.fitness, meanFit, (self.gbest.fitness-meanFit))
     #     return (cond1 and cond2)
     
-    def _convergedSpace(self, p, m):
+    def _convergedSpace(self, p, n):
         sortedSwarm = [particle for particle in self.swarm]
         sortedSwarm.sort(key=lambda part: -part.fitness)
         bestOfBest = sortedSwarm[0:int(floor(self.particleCount*p))]
         
         diffs = []
         for particle in bestOfBest:
-            diffs.append(self.gbest.position-particle.position)
+            diffs.append((self.gbest.position-particle.position)/self.gbest.position)
             
         maxNorm = max(list(map(numpy.linalg.norm, diffs)))
         print('Max Norm',maxNorm,'Best fitness',self.gbest.fitness)
-        return (abs(maxNorm)<m)
+        return (abs(maxNorm)<n)
 
     def _convergedSpace2(self, p):
         #Andres N. Ruiz et al.
@@ -249,88 +262,6 @@ class ParticleSwarmOptimizer(object):
     def isMaster(self):
         return True   
 
-    def _run_emcee(self,current_it,it=10):
-         print("Inside emcee. Iteration PSO: ",current_it)
-         p = numpy.array([part.position for part in self.swarm])
-         lnprob = numpy.array([part.fitness  for part in self.swarm])
-         for j in range(int(it)):
-             print("Iteration ",j)
-             #--------- modified version -------
-             aranged = numpy.arange(self.particleCount)
-             halfk = int(self.particleCount/2)
-             numpy.random.shuffle(aranged)
-             first  = aranged[0:halfk]
-             second = aranged[halfk:self.particleCount]
-             #----------------------------------
-
-             for S0, S1 in [(first, second), (second, first)]:
-                 q, newlnp, acc = self._propose_stretch(p[S0], p[S1], lnprob[S0])
-                 if numpy.any(acc):
-                             #------ modified version ---------
-                             temp = lnprob[S0]
-                             temp[acc] = newlnp[acc]
-                             lnprob[S0]= temp
-
-                             temp = p[S0]
-                             temp[acc]= q[acc]
-                             p[S0]=temp
-         l = 0
-         for particle in self.swarm:
-             particle.position = p[l]
-             particle.fitness  = lnprob[l]
-             l +=1
-         pass
-
-    def _propose_stretch(self,p0, p1, lnprob0,a=2.0):
-         """
-    #     Propose a new position for one sub-ensemble given the positions of
-    #     another.
-
-    #     :param p0:
-    #         The positions from which to jump.
-
-    #     :param p1:
-    #         The positions of the other ensemble.
-
-    #     :param lnprob0:
-    #         The log-probabilities at ``p0``.
-
-    #     This method returns:
-
-    #     * ``q`` - The new proposed positions for the walkers in ``ensemble``.
-
-    #     * ``newlnprob`` - The vector of log-probabilities at the positions
-    #       given by ``q``.
-
-    #     * ``accept`` - A vector of type ``bool`` indicating whether or not
-    #       the proposed position for each walker should be accepted.
-
-    #     * ``blob`` - The new meta data blobs or ``None`` if nothing was
-    #       returned by ``lnprobfn``.
-
-         """
-         s = numpy.atleast_2d(p0)
-         Ns = len(s)
-         c = numpy.atleast_2d(p1)
-         Nc = len(c)
-
-         # Generate the vectors of random numbers that will produce the
-         # proposal.
-         zz = ((a - 1.) * numpy.random.rand(Ns) + 1) ** 2. / a
-         rint = numpy.random.randint(Nc, size=(Ns,))
-
-         # Calculate the proposed positions and the log-probability there.
-         q = c[rint] - zz[:, numpy.newaxis] * (c[rint] - s)
-         #--new prob 
-         results = self.pool.map(self.func, q)
-         newlnprob = numpy.array([l[0] for l in results])
-
-         # Decide whether or not the proposals should be accepted.
-         lnpdiff = (self.paramCount - 1.) * numpy.log(zz) + newlnprob - lnprob0
-         accept = (lnpdiff > numpy.log(numpy.random.rand(len(lnpdiff))))
-
-         return q, newlnprob,accept
-
 class Particle(object):
     """
     Implementation of a single particle
@@ -340,7 +271,6 @@ class Particle(object):
     :param fitness: the current fitness of the particle
     
     """
-    
     
     def __init__(self, position, velocity, fitness = 0):
         self.position = position
@@ -355,9 +285,6 @@ class Particle(object):
         """
         Creates a new particle without position, velocity and -inf as fitness
         """
-        # return Particle(numpy.array([[]]*paramCount),
-        #          numpy.array([[]]*paramCount),
-        #          -numpy.Inf)
 
         return Particle(numpy.zeros(paramCount),numpy.zeros(paramCount),-numpy.Inf)
         

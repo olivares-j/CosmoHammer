@@ -254,11 +254,21 @@ class CosmoHammerSampler(object):
         """
         
         counter = 1
+        # self._sampler.a=10.0
         for pos, prob, rstate, datas in self._sampler.sample(p0, iterations=self.burninIterations,storechain=False):
             if self.isMaster():
                 self.storageUtil.persistBurninValues(pos, prob, datas)
-                if(counter%10==0):
-                    self.log("Iteration finished:" + str(counter))
+            if(counter%10==0):
+                pmacc = np.mean(self._sampler.acceptance_fraction)
+                mean_acc = self.gather(pmacc)
+                if self.isMaster():
+                    self.log("acc_frac:"+str(round(mean_acc, 4))+" Iteration finished:"+str(counter))
+            # if(counter%100==0):
+            #     self._sampler.a -= 1.0
+            #     if self._sampler.a <= 2.0:
+            #         self._sampler.a=2.0
+            #     if self.isMaster():
+            #         self.log("a parameter set to: "+str(self._sampler.a))
                 
             counter = counter + 1
 
@@ -280,13 +290,16 @@ class CosmoHammerSampler(object):
                                                         # blobs0=datas):
             self.log("Iteration done. Persisting", logging.DEBUG)
             if self.isMaster():
-                self.storageUtil.persistSamplingValues(pos, prob, datas)
+                    self.storageUtil.persistSamplingValues(pos, prob, datas)
+            if(counter%10==0):
+                pmacc = np.mean(self._sampler.acceptance_fraction)
+                mean_acc = self.gather(pmacc)
+                if self.isMaster():
+                    self.log("a.frac:"+str(round(mean_acc, 4))+" Iteration finished:"+str(counter))
                 
-                if(self.stopCriteriaStrategy.hasFinished()):
-                    break
-                
-                if(counter%10==0):
-                    self.log("Iteration finished:" + str(counter))
+                    # if(self.stopCriteriaStrategy.hasFinished()):
+                    #     break
+                    
                 
             counter = counter + 1
 
@@ -342,6 +355,7 @@ class CosmoHammerSampler(object):
         """
         desc = "Sampler: " + str(type(self))+"\n" \
                 "configuration: \n" \
+                "  emcee a parameter: " +str(self._sampler.a)+"\n" \
                 "  Burnin iterations: " +str(self.burninIterations)+"\n" \
                 "  Samples iterations: " +str(self.sampleIterations)+"\n" \
                 "  Walkers ratio: " +str(self.walkersRatio)+"\n" \

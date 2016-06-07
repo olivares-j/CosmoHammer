@@ -24,6 +24,11 @@ class SampleTruncatedBallPositionGenerator(object):
         #     self.sampler.paramCount)*self.sampler.paramWidths for i in range((self.sampler.nwalkers-1))]])
 
         walkers_pos = numpy.zeros((self.sampler.nwalkers-1,self.sampler.paramCount))
+
+        print self.sampler.paramMins
+        print self.sampler.paramMaxs
+        print self.sampler.paramValues
+        print self.sampler.paramWidths
         
         for j in range(len(walkers_pos)):
             for i in range(self.sampler.paramCount):
