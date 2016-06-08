@@ -1,6 +1,6 @@
 from __future__ import print_function, division, absolute_import, unicode_literals
 
-import myemcee as emcee
+import emcee
 import numpy as np
 import logging
 import time
