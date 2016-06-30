@@ -57,7 +57,7 @@ class ParticleSwarmOptimizer(object):
         self.dcore   = 1e-50  # min relative distance at wich accelerations turns to zero to avoid infinities.
         # self.daction = 1e-3   # max distance at wich accelerations turns to zero.
         # self.c3 = (req/(0.5*(self.c1+self.c2)))**2  # constant to balance forces.
-        self.c3 = (self.c1+self.c2)*(req**3)  # constant to balance forces, independent in each dimension.
+        self.c3 = 0.5*(self.c1+self.c2)*(req**3)  # constant to balance forces, independent in each dimension.
         # It is complemented in each dimesnion by multiplying by p0[i]
         
         if self.threads > 1 and self.pool is None:
@@ -147,10 +147,10 @@ class ParticleSwarmOptimizer(object):
             rho  = numpy.zeros((self.particleCount,self.paramCount)) 
             for i in range(self.particleCount):
                 for j in range(self.particleCount):
-                    rho[j] = p0[i]-p0[j]
+                    rho[j] = (p0[j]/p0[i])-1
                 # non    = numpy.where((numpy.abs(rho) < self.dcore)| (numpy.abs(rho) > self.daction))
-                non    = numpy.where((numpy.abs(rho/p0[i]) < self.dcore))
-                accs   = -1.0*numpy.sign(rho)*((numpy.abs(p0[i])**3)*self.c3)/(rho**2)
+                non    = numpy.where((numpy.abs(rho) < self.dcore))
+                accs   = -1.0*numpy.sign(rho)*((numpy.abs(p0[i]))*self.c3)/(rho**2)
                 accs[non] = 0.0
                 acc[i] = numpy.sum(accs,axis=0)
                 # print(acc)
