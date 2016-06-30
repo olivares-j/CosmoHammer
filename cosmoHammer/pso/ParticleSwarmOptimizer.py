@@ -5,8 +5,6 @@ Created on Sep 30, 2013
 '''
 from __future__ import print_function, division, absolute_import, unicode_literals
 from copy import copy
-from math import floor
-import math
 import multiprocessing
 import numpy
 import pandas
@@ -39,7 +37,7 @@ class ParticleSwarmOptimizer(object):
     '''
 
 
-    def __init__(self, func, low, high, particleCount=25,req=1e-10, threads=1, pool=None, fSwarm=None):
+    def __init__(self, func, low, high, particleCount=25,req=1e-8, threads=1, pool=None, fSwarm=None):
         '''
         Constructor
         req : distance at which repultion and atraction are equal.
@@ -56,9 +54,11 @@ class ParticleSwarmOptimizer(object):
         self.c2 = 1.49618
         self.w  = 0.7298
         #---- modified acccelerated PSO of Blackwell Bently  ------
-        self.dcore   = 1e-50  # min distance at wich accelerations turns to zero to avoid infinities.
-        self.daction = 1e-3   # max distance at wich accelerations turns to zero.
-        self.c3 = (req/(0.5*(self.c1+self.c2)))**2  # constant to balance forces.
+        self.dcore   = 1e-50  # min relative distance at wich accelerations turns to zero to avoid infinities.
+        # self.daction = 1e-3   # max distance at wich accelerations turns to zero.
+        # self.c3 = (req/(0.5*(self.c1+self.c2)))**2  # constant to balance forces.
+        self.c3 = (self.c1+self.c2)*(req**3)  # constant to balance forces, independent in each dimension.
+        # It is complemented in each dimesnion by multiplying by p0[i]
         
         if self.threads > 1 and self.pool is None:
             self.pool = multiprocessing.Pool(self.threads)
@@ -147,10 +147,10 @@ class ParticleSwarmOptimizer(object):
             rho  = numpy.zeros((self.particleCount,self.paramCount)) 
             for i in range(self.particleCount):
                 for j in range(self.particleCount):
-                    rho[j] = 1.0-(p0[j]/p0[i])
+                    rho[j] = p0[i]-p0[j]
                 # non    = numpy.where((numpy.abs(rho) < self.dcore)| (numpy.abs(rho) > self.daction))
-                non    = numpy.where((numpy.abs(rho) < self.dcore))
-                accs   = numpy.abs(p0)*numpy.sign(rho)*(self.c3*(rho**-1))
+                non    = numpy.where((numpy.abs(rho/p0[i]) < self.dcore))
+                accs   = -1.0*numpy.sign(rho)*((numpy.abs(p0[i])**3)*self.c3)/(rho**2)
                 accs[non] = 0.0
                 acc[i] = numpy.sum(accs,axis=0)
                 # print(acc)
@@ -221,14 +221,14 @@ class ParticleSwarmOptimizer(object):
         
     def _convergedFit(self, p, m):
         bestSort = numpy.sort([particle.pbest.fitness for particle in self.swarm])[::-1]
-        meanFit = numpy.mean(bestSort[1:math.floor(self.particleCount*p)])
+        meanFit = numpy.mean(bestSort[1:int(self.particleCount*p)])
         # print( "best , meanFit, ration %",self.gbest.fitness, meanFit, (self.gbest.fitness-meanFit))
         return (numpy.abs(1.0-numpy.abs(meanFit/self.gbest.fitness)) < m ) 
 
     # def _convergedFit2(self, it, p, m):
     #     bestSort = numpy.sort([particle.pbest.fitness for particle in self.swarm])[::-1]
-    #     maxFit = max(bestSort[1:math.floor(self.particleCount*p)])
-    #     minFit = min(bestSort[1:math.floor(self.particleCount*p)])
+    #     maxFit = max(bestSort[1:int(self.particleCount*p)])
+    #     minFit = min(bestSort[1:int(self.particleCount*p)])
     #     cond1  = abs(self.gbest.fitness-maxFit)<m
     #     cond2  = abs(self.gbest.fitness-minFit)<m
     #     #print( "best , meanFit, ration %",self.gbest.fitness, meanFit, (self.gbest.fitness-meanFit))
@@ -237,7 +237,7 @@ class ParticleSwarmOptimizer(object):
     def _convergedSpace(self, p, n):
         sortedSwarm = [particle for particle in self.swarm]
         sortedSwarm.sort(key=lambda part: -part.fitness)
-        bestOfBest = sortedSwarm[0:int(floor(self.particleCount*p))]
+        bestOfBest = sortedSwarm[0:int(self.particleCount*p)]
         
         diffs = []
         for particle in bestOfBest:
@@ -251,7 +251,7 @@ class ParticleSwarmOptimizer(object):
         #Andres N. Ruiz et al.
         sortedSwarm = [particle for particle in self.swarm]
         sortedSwarm.sort(key=lambda part: -part.fitness)
-        bestOfBest = sortedSwarm[0:int(floor(self.particleCount*p))]
+        bestOfBest = sortedSwarm[0:int(self.particleCount*p)]
         
         positions = [particle.position for particle in bestOfBest]
         means = numpy.mean(positions, axis=0)
