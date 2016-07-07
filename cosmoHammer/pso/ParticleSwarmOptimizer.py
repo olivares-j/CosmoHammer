@@ -5,6 +5,7 @@ Created on Sep 30, 2013
 '''
 from __future__ import print_function, division, absolute_import, unicode_literals
 from copy import copy
+import sys
 import multiprocessing
 import numpy
 import pandas
@@ -37,7 +38,7 @@ class ParticleSwarmOptimizer(object):
     '''
 
 
-    def __init__(self, func, low, high, particleCount=25,req=1e-8, threads=1, pool=None, fSwarm=None):
+    def __init__(self, func, low, high, particleCount=25,req=1e-8, threads=1, pool=None, fSwarm=None,InPos=None):
         '''
         Constructor
         req : distance at which repultion and atraction are equal.
@@ -74,11 +75,16 @@ class ParticleSwarmOptimizer(object):
         
         self.paramCount = len(self.low)
 
-        if fSwarm is None :
+        # if fSwarm is None :
+        #     self.swarm = self._initSwarm()
+        # else:
+        #     self.swarm = self._readSwarm(fSwarm)
+        #     print("Position read")
+
+        if InPos is None :
             self.swarm = self._initSwarm()
         else:
-            self.swarm = self._readSwarm(fSwarm)
-            print("Position read")
+            self.swarm = self._array2Swarm(InPos)
         
         self.gbest = Particle.create(self.paramCount)
         
@@ -100,6 +106,12 @@ class ParticleSwarmOptimizer(object):
         # for i,part in enumerate(swarm):
         #     if i>47 and i < 54 :
         #         part.position = part.position*numpy.random.uniform(0.9,1.1) 
+        return swarm
+
+    def _array2Swarm(self,InPos):
+        swarm = []
+        for i in range(self.particleCount):
+            swarm.append(Particle(position=InPos[-i,:],velocity=numpy.zeros(self.paramCount)))
         return swarm
         
     def sample(self, maxIter=1000, c1=1.193, c2=1.193, p=0.7, m=10**-3, n=10**-2):
@@ -123,8 +135,6 @@ class ParticleSwarmOptimizer(object):
                 if ((self.gbest.fitness)<particle.fitness):
                     
                     self.gbest = particle.copy()
-                    # if(self.isMaster()):
-                    #   print("new global best found %i %s"%(i, self.gbest.__str__()))
                     
                 if (particle.fitness > particle.pbest.fitness):
                     particle.updatePBest()
