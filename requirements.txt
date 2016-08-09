@@ -1,4 +1,4 @@
-emcee
+emcee=2.1.1-DANCe
 numpy
 mock>=1.0.1
 pytest>=2.6.3
