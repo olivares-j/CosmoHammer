@@ -59,6 +59,7 @@ class CosmoHammerSampler(object):
         self.burninIterations = burninIterations
         self.sampleIterations = sampleIterations
         self.initPositions    = initPositions
+        self.pool   = pool
         
         
         assert sampleIterations > 0, "CosmoHammer needs to sample for at least one iterations"
@@ -74,7 +75,7 @@ class CosmoHammerSampler(object):
         self.log("Using CosmoHammer "+str(cosmoHammer.__version__))
         
         # The sampler object
-        self._sampler = self.createEmceeSampler(likelihoodComputationChain, pool=pool)
+        self._sampler = self.createEmceeSampler(likelihoodComputationChain)
         
         if(storageUtil is None):
             storageUtil = self.createSampleFileUtil()
@@ -168,14 +169,14 @@ class CosmoHammerSampler(object):
             # Print out the mean acceptance fraction. In general, acceptance_fraction
             # has an entry for each walker
             
-            pmacc = np.mean(self._sampler.acceptance_fraction)
-            mean_acc = self.gather(pmacc)
+            # pmacc = np.mean(self._sampler.acceptance_fraction)
+            # mean_acc = self.gather(pmacc)
             # print(mean_acc)
 
             # pmacor = np.mean(self._sampler.get_autocorr_time())
             # mean_acor = self.gather(pmacor)
             
-            self.log("Mean acceptance fraction:"+ str(round(mean_acc, 4)))
+            self.log("Mean acceptance fraction:"+ str(round(np.mean(self._sampler.acceptance_fraction), 4)))
             # self.log("Autocorrelation time:" + str(round(mean_acor, 4)))
         finally:
             if self._sampler.pool is not None:
@@ -220,15 +221,15 @@ class CosmoHammerSampler(object):
         pos, prob, rstate, data = self.sampleBurnin(p0)
         end = time.time()
 
-        pmacc = np.mean(self._sampler.acceptance_fraction)
-        mean_acc = self.gather(pmacc)
+        # pmacc = np.mean(self._sampler.acceptance_fraction)
+        # mean_acc = self.gather(pmacc)
         # print(mean_acc)
 
         # pmacor = np.mean(self._sampler.get_autocorr_time())
         # mean_acor = self.gather(pmacor)
 
         self.log("burn in sampling done! Took: " + str(round(end-start,4))+"s")
-        self.log("Mean acceptance fraction for burn in:" + str(round(mean_acc, 4)))
+        self.log("Mean acceptance fraction for burn in:" + str(round(np.mean(self._sampler.acceptance_fraction), 4)))
         # self.log("Autocorrelation time for burn in:" + str(round(mean_acor, 4)))
 
         
@@ -259,10 +260,10 @@ class CosmoHammerSampler(object):
             if self.isMaster():
                 self.storageUtil.persistBurninValues(pos, prob, datas)
             if(counter%10==0):
-                pmacc = np.mean(self._sampler.acceptance_fraction)
-                mean_acc = self.gather(pmacc)
+                # pmacc = np.mean(self._sampler.acceptance_fraction)
+                # mean_acc = self.gather(pmacc)
                 if self.isMaster():
-                    self.log("acc_frac:"+str(round(mean_acc, 4))+" Iteration finished:"+str(counter))
+                    self.log("acc_frac:"+str(round(np.mean(self._sampler.acceptance_fraction), 4))+" Iteration finished:"+str(counter))
             # if(counter%100==0):
             #     self._sampler.a -= 1.0
             #     if self._sampler.a <= 2.0:
@@ -289,13 +290,15 @@ class CosmoHammerSampler(object):
                                                         # rstate0=burninRstate, 
                                                         # blobs0=datas):
             self.log("Iteration done. Persisting", logging.DEBUG)
+            pmacc = np.mean(self._sampler.acceptance_fraction)
+            print(pmacc)
             if self.isMaster():
                     self.storageUtil.persistSamplingValues(pos, prob, datas)
             if(counter%10==0):
-                pmacc = np.mean(self._sampler.acceptance_fraction)
-                mean_acc = self.gather(pmacc)
+                # pmacc = np.mean(self._sampler.acceptance_fraction)
+                # mean_acc = self.gather(pmacc)
                 if self.isMaster():
-                    self.log("a.frac:"+str(round(mean_acc, 4))+" Iteration finished:"+str(counter))
+                    self.log("a.frac:"+str(round(np.mean(self._sampler.acceptance_fraction), 4))+" Iteration finished:"+str(counter))
                 
                     # if(self.stopCriteriaStrategy.hasFinished()):
                     #     break
@@ -333,6 +336,7 @@ class CosmoHammerSampler(object):
                                      self.paramCount, 
                                      callable, 
                                      threads=self.threadCount, 
+                                     pool=self.pool,
                                      **kwargs)
 
     def createInitPos(self):

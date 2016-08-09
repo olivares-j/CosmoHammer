@@ -58,8 +58,11 @@ class ParticleSwarmOptimizer(object):
         self.dcore   = 1e-50  # min relative distance at wich accelerations turns to zero to avoid infinities.
         # self.daction = 1e-3   # max distance at wich accelerations turns to zero.
         # self.c3 = (req/(0.5*(self.c1+self.c2)))**2  # constant to balance forces.
-        self.c3 = 0.5*(self.c1+self.c2)*(req**3)  # constant to balance forces, independent in each dimension.
-        # It is complemented in each dimesnion by multiplying by p0[i]
+        # Force inversely proportional to square of distance
+        # self.c3 = 0.5*(self.c1+self.c2)*(req**3)  # constant to balance forces, independent in each dimension.
+        # Force inversely proportional to the distance
+        self.c3 = 0.5*(self.c1+self.c2)*(req**2)  # constant to balance forces, independent in each dimension.
+        # It is complemented in each dimension multiplying it by p0[i]
         
         if self.threads > 1 and self.pool is None:
             self.pool = multiprocessing.Pool(self.threads)
@@ -160,7 +163,12 @@ class ParticleSwarmOptimizer(object):
                     rho[j] = (p0[j]/p0[i])-1
                 # non    = numpy.where((numpy.abs(rho) < self.dcore)| (numpy.abs(rho) > self.daction))
                 non    = numpy.where((numpy.abs(rho) < self.dcore))
-                accs   = -1.0*numpy.sign(rho)*((numpy.abs(p0[i]))*self.c3)/(rho**2)
+                # To balnce the forces, the constant c3 must be multiplied by p0**3.
+                # SInce distance = rho * p0 the term multiplying c3 is just p0 instead of p0**3
+                # Force inversley proportional to the square of distance
+                # accs   = -1.0*numpy.sign(rho)*((numpy.abs(p0[i]))*self.c3)/(rho**2)
+                #Force inversley proportional to distance a = d**-1
+                accs   = -1.0*numpy.sign(rho)*((numpy.abs(p0[i]))*self.c3)/(rho)
                 accs[non] = 0.0
                 acc[i] = numpy.sum(accs,axis=0)
                 # print(acc)
@@ -253,9 +261,9 @@ class ParticleSwarmOptimizer(object):
         for particle in bestOfBest:
             diffs.append((self.gbest.position-particle.position)/self.gbest.position)
             
-        maxNorm = max(list(map(numpy.linalg.norm, diffs)))
-        print('Max Norm',maxNorm,'Best fitness',self.gbest.fitness)
-        return (abs(maxNorm)<n)
+        meanNorm = numpy.mean(list(map(numpy.linalg.norm, diffs)))
+        print('Mean Norm',meanNorm,'Best fitness',self.gbest.fitness)
+        return (abs(meanNorm)<n)
 
     def _convergedSpace2(self, p):
         #Andres N. Ruiz et al.
