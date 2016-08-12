@@ -27,7 +27,7 @@ class PyTest(TestCommand):
 
 
 desc = open("README.rst").read()
-required = ["numpy", "emcee"]
+required = ["numpy", "emcee=2.1.1"]
 test_requires = ["mock"]
 
 PACKAGE_PATH = os.path.abspath(os.path.join(__file__, os.pardir))

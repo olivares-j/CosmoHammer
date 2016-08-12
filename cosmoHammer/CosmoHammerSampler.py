@@ -290,8 +290,8 @@ class CosmoHammerSampler(object):
                                                         # rstate0=burninRstate, 
                                                         # blobs0=datas):
             self.log("Iteration done. Persisting", logging.DEBUG)
-            pmacc = np.mean(self._sampler.acceptance_fraction)
-            print(pmacc)
+            # pmacc = np.mean(self._sampler.acceptance_fraction)
+            # print(pmacc)
             if self.isMaster():
                     self.storageUtil.persistSamplingValues(pos, prob, datas)
             if(counter%10==0):

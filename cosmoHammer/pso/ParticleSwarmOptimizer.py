@@ -38,7 +38,7 @@ class ParticleSwarmOptimizer(object):
     '''
 
 
-    def __init__(self, func, low, high, particleCount=25,req=1e-8, threads=1, pool=None, fSwarm=None,InPos=None):
+    def __init__(self, func, low, high, particleCount=25,req=1e-8, threads=1, pool=None, fSwarm=None,InPos=None,facwarm=1,nwarm=1000):
         '''
         Constructor
         req : distance at which repultion and atraction are equal.
@@ -54,6 +54,9 @@ class ParticleSwarmOptimizer(object):
         self.c1 = 1.49618
         self.c2 = 1.49618
         self.w  = 0.7298
+        #----------- Warmed PSO ---------
+        self.nwarm   = nwarm # lapse of iterations at which warming will apply
+        self.facwarm = facwarm # Warming factor >= 1. Velocities will be multiplied by this factor.
         #---- modified acccelerated PSO of Blackwell Bently  ------
         self.dcore   = 1e-50  # min relative distance at wich accelerations turns to zero to avoid infinities.
         # self.daction = 1e-3   # max distance at wich accelerations turns to zero.
@@ -130,7 +133,7 @@ class ParticleSwarmOptimizer(object):
         """
         self._get_fitness(self.swarm)
 
-        i = 0
+        h = 0
         while True:
             
             
@@ -142,11 +145,11 @@ class ParticleSwarmOptimizer(object):
                 if (particle.fitness > particle.pbest.fitness):
                     particle.updatePBest()
 
-            if(i>=maxIter):
+            if(h>=maxIter):
                 print("max iteration reached! stoping")
                 return
 
-            if(self._converged(i, p=p,m=m, n=n)):
+            if(self._converged(p=p,m=m, n=n)):
                 if(self.isMaster()):
                     print("converged after %s iterations!"%i)
                     print("best fit found: ", self.gbest.fitness, self.gbest.position)
@@ -173,20 +176,20 @@ class ParticleSwarmOptimizer(object):
                 acc[i] = numpy.sum(accs,axis=0)
                 # print(acc)
 
-            #-------- COMMON PSO ---------
             
+            velfac  = 1.0
+            if h%self.nwarm == 0:
+                velfac = self.facwarm
+
             for i,particle in enumerate(self.swarm):
-                #This is a PSO with inertia
-                #w = 0.5 + numpy.random.uniform(0,1,size=self.paramCount)/2
-                
-                #----- This is my pso. 0.2% of the realisations will produce a velocity factor grater than 1
-                # w  = w + numpy.absolute(numpy.random.uniform(0,0.09006,size=self.paramCount))
-		#----------------------------------------------------------
+		    #-------- warmed PSO  --------
+                particle.velocity = velfac*particle.velocity
+            #-------- COMMON PSO ---------
                 part_vel = self.w * particle.velocity
                 cog_vel = self.c1 * numpy.random.uniform(0,1,size=self.paramCount) * (particle.pbest.position - particle.position)
                 soc_vel = self.c2 * numpy.random.uniform(0,1,size=self.paramCount) * (self.gbest.position - particle.position)
                 particle.velocity = part_vel + cog_vel + soc_vel 
-                #---- accelerated PSO ------------
+            #---- accelerated PSO ------------
                 particle.position = particle.position + particle.velocity + 0.5*acc[i]
 
             self._get_fitness(self.swarm)
@@ -196,7 +199,7 @@ class ParticleSwarmOptimizer(object):
                 swarm.append(particle.copy()) 
             yield swarm
             
-            i+=1
+            h+=1
         
     def optimize(self, maxIter=1000, c1=1.193, c2=1.193, p=0.7, m=10**-3, n=10**-2):
         """
@@ -227,7 +230,7 @@ class ParticleSwarmOptimizer(object):
         for i, particle in enumerate(swarm):
             particle.fitness = lnprob[i]
 
-    def _converged(self,it, p, m, n):
+    def _converged(self,p, m, n):
 #        test = self._convergedSpace2(p=p)
 #        print(test)
         fit = self._convergedFit(p=p, m=m)

@@ -36,10 +36,10 @@ class MpiParticleSwarmOptimizer(ParticleSwarmOptimizer):
         else:
             return map
 
-    def _converged(self, it, p, m, n):
+    def _converged(self, p, m, n):
         
         if(self.isMaster()):
-            converged =  super(MpiParticleSwarmOptimizer, self)._converged(it, p, m, n)
+            converged =  super(MpiParticleSwarmOptimizer, self)._converged( p, m, n)
         else:
             converged = False
         
